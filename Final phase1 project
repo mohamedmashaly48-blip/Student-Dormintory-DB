@@ -1,0 +1,287 @@
+USE [master];
+GO
+
+IF DB_ID(N'Student_Dormitory') IS NOT NULL
+BEGIN
+    ALTER DATABASE [Student_Dormitory] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [Student_Dormitory];
+END
+GO
+
+CREATE DATABASE [Student_Dormitory]
+ON PRIMARY
+(   NAME = N'Dorm_Primary',
+    FILENAME = N'C:\mohamed quiz\Team Project\Dorm_Primary.mdf',
+    SIZE = 8MB, MAXSIZE = 100MB, FILEGROWTH = 8MB ),
+FILEGROUP [FG_Operations]
+(   NAME = N'Dorm_Data2',
+    FILENAME = N'C:\mohamed quiz\Team Project\Dorm_Data2.ndf',
+    SIZE = 8MB, MAXSIZE = 100MB, FILEGROWTH = 8MB ),
+(   NAME = N'Dorm_Data3',
+    FILENAME = N'C:\mohamed quiz\Team Project\Dorm_Data3.ndf',
+    SIZE = 8MB, MAXSIZE = 100MB, FILEGROWTH = 8MB )
+LOG ON
+(   NAME = N'Dorm_Log1',
+    FILENAME = N'C:\mohamed quiz\Team Project\Dorm_Log1.ldf',
+    SIZE = 8MB, MAXSIZE = 200MB, FILEGROWTH = 8MB ),
+(   NAME = N'Dorm_Log2',
+    FILENAME = N'C:\mohamed quiz\Team Project\Dorm_Log2.ldf',
+    SIZE = 8MB, MAXSIZE = 200MB, FILEGROWTH = 8MB );
+GO
+
+USE [Student_Dormitory];
+GO
+
+
+CREATE TABLE dbo.Buildings
+(
+    Building_Id      INT IDENTITY(1,1) NOT NULL,
+    Building_Name    VARCHAR(50)       NOT NULL,
+    Address          VARCHAR(100)      NOT NULL,
+    Number_of_Floors INT               NOT NULL
+        CONSTRAINT DF_Buildings_Floors DEFAULT 1,
+
+    CONSTRAINT PK_Buildings        PRIMARY KEY (Building_Id),
+    CONSTRAINT UQ_Buildings_Name   UNIQUE (Building_Name),
+    CONSTRAINT CK_Buildings_Floors CHECK (Number_of_Floors > 0)
+) ON [PRIMARY];
+GO
+
+CREATE TABLE dbo.Rooms
+(
+    Room_Id      INT IDENTITY(1,1) NOT NULL,
+    Room_Number  INT               NOT NULL,
+    Capacity     INT               NOT NULL,
+    Monthly_Rent DECIMAL(10,2)     NOT NULL,
+    Room_Type    VARCHAR(20)       NOT NULL
+        CONSTRAINT DF_Rooms_Type DEFAULT 'Double',
+    Building_Id  INT               NOT NULL,
+
+    CONSTRAINT PK_Rooms                 PRIMARY KEY (Room_Id),
+    CONSTRAINT FK_Rooms_Buildings       FOREIGN KEY (Building_Id)
+                                        REFERENCES dbo.Buildings (Building_Id),
+    CONSTRAINT UQ_Rooms_Building_Number UNIQUE (Building_Id, Room_Number),
+    CONSTRAINT CK_Rooms_Capacity        CHECK (Capacity BETWEEN 1 AND 6),
+    CONSTRAINT CK_Rooms_Rent            CHECK (Monthly_Rent > 0),
+    CONSTRAINT CK_Rooms_Type            CHECK (Room_Type IN ('Single','Double','Triple'))
+) ON [PRIMARY];
+GO
+
+CREATE TABLE dbo.Student
+(
+    Student_Id      INT IDENTITY(1,1) NOT NULL,
+    First_Name      VARCHAR(50)       NOT NULL,
+    Last_Name       VARCHAR(50)       NOT NULL,
+    Email           VARCHAR(100)      NOT NULL,
+    Phone           VARCHAR(20)       NOT NULL,
+    Date_of_Birth   DATE              NOT NULL,
+    Enrollment_Date DATE              NOT NULL
+        CONSTRAINT DF_Student_Enrollment DEFAULT GETDATE(),
+
+    CONSTRAINT PK_Student        PRIMARY KEY (Student_Id),
+    CONSTRAINT UQ_Student_Email  UNIQUE (Email),
+    CONSTRAINT UQ_Student_Phone  UNIQUE (Phone),
+    CONSTRAINT CK_Student_Email  CHECK (Email LIKE '%_@_%._%'),
+    CONSTRAINT CK_Student_Dates  CHECK (Enrollment_Date > Date_of_Birth)
+) ON [PRIMARY];
+GO
+
+CREATE TABLE dbo.Staff
+(
+    Staff_Id   INT IDENTITY(1,1) NOT NULL,
+    First_Name VARCHAR(50)       NOT NULL,
+    Last_Name  VARCHAR(50)       NOT NULL,
+    Role       VARCHAR(50)       NOT NULL,
+    Phone      VARCHAR(20)       NOT NULL,
+
+    CONSTRAINT PK_Staff       PRIMARY KEY (Staff_Id),
+    CONSTRAINT UQ_Staff_Phone UNIQUE (Phone)
+) ON [PRIMARY];
+GO
+
+CREATE TABLE dbo.Room_Assignments
+(
+    Assignment_Id INT IDENTITY(1,1) NOT NULL,
+    Start_Date    DATE              NOT NULL
+        CONSTRAINT DF_Assignments_Start DEFAULT GETDATE(),
+    End_Date      DATE              NOT NULL,
+    Status        VARCHAR(20)       NOT NULL
+        CONSTRAINT DF_Assignments_Status DEFAULT 'Active',
+    Student_Id    INT               NOT NULL,
+    Room_Id       INT               NOT NULL,
+
+    CONSTRAINT PK_Room_Assignments          PRIMARY KEY (Assignment_Id),
+    CONSTRAINT FK_Room_Assignments_Student  FOREIGN KEY (Student_Id)
+                                            REFERENCES dbo.Student (Student_Id),
+    CONSTRAINT FK_Room_Assignments_Rooms    FOREIGN KEY (Room_Id)
+                                            REFERENCES dbo.Rooms (Room_Id),
+    CONSTRAINT CK_Room_Assignments_Dates    CHECK (End_Date >= Start_Date),
+    CONSTRAINT CK_Room_Assignments_Status   CHECK (Status IN ('Active','Completed','Cancelled'))
+) ON [PRIMARY];
+GO
+
+CREATE TABLE dbo.Payments
+(
+    Payment_Id    INT IDENTITY(1,1) NOT NULL,
+    Amount        DECIMAL(10,2)     NOT NULL,
+    Payment_Date  DATE              NOT NULL
+        CONSTRAINT DF_Payments_Date DEFAULT GETDATE(),
+    Payment_Month DATE              NOT NULL,
+    Status        VARCHAR(20)       NOT NULL
+        CONSTRAINT DF_Payments_Status DEFAULT 'Pending',
+    Student_Id    INT               NOT NULL,
+    Assignment_Id INT               NOT NULL,
+
+    CONSTRAINT PK_Payments                 PRIMARY KEY (Payment_Id),
+    CONSTRAINT FK_Payments_Student         FOREIGN KEY (Student_Id)
+                                           REFERENCES dbo.Student (Student_Id),
+    CONSTRAINT FK_Payments_Room_Assignments FOREIGN KEY (Assignment_Id)
+                                           REFERENCES dbo.Room_Assignments (Assignment_Id),
+    CONSTRAINT CK_Payments_Amount          CHECK (Amount > 0),
+    CONSTRAINT CK_Payments_Status          CHECK (Status IN ('Paid','Pending','Overdue'))
+) ON [FG_Operations];
+GO
+
+CREATE TABLE dbo.Maintenance_Requests
+(
+    Request_Id   INT IDENTITY(1,1) NOT NULL,
+    Description  VARCHAR(500)      NOT NULL,
+    Request_Date DATE              NOT NULL
+        CONSTRAINT DF_Maintenance_Date DEFAULT GETDATE(),
+    Status       VARCHAR(20)       NOT NULL
+        CONSTRAINT DF_Maintenance_Status DEFAULT 'Pending',
+    Student_Id   INT               NOT NULL,
+    Room_Id      INT               NOT NULL,
+    Staff_Id     INT               NOT NULL,
+
+    CONSTRAINT PK_Maintenance_Requests         PRIMARY KEY (Request_Id),
+    CONSTRAINT FK_Maintenance_Requests_Student FOREIGN KEY (Student_Id)
+                                               REFERENCES dbo.Student (Student_Id),
+    CONSTRAINT FK_Maintenance_Requests_Rooms   FOREIGN KEY (Room_Id)
+                                               REFERENCES dbo.Rooms (Room_Id),
+    CONSTRAINT FK_Maintenance_Requests_Staff   FOREIGN KEY (Staff_Id)
+                                               REFERENCES dbo.Staff (Staff_Id),
+    CONSTRAINT CK_Maintenance_Status           CHECK (Status IN ('Pending','In Progress','Completed'))
+) ON [FG_Operations];
+GO
+
+SET IDENTITY_INSERT dbo.Buildings ON;
+INSERT dbo.Buildings (Building_Id, Building_Name, Address, Number_of_Floors) VALUES
+(1, N'Al-Noor Hall',  N'12 University St, Cairo', 5),
+(2, N'Al-Salam Hall', N'14 University St, Cairo', 4),
+(3, N'Al-Amal Hall',  N'3 Campus Rd, Giza',       6),
+(4, N'Al-Nile Hall',  N'27 Corniche Rd, Giza',    5),
+(5, N'Al-Waha Hall',  N'8 Garden St, Cairo',      3);
+SET IDENTITY_INSERT dbo.Buildings OFF;
+GO
+
+SET IDENTITY_INSERT dbo.Rooms ON;
+INSERT dbo.Rooms (Room_Id, Room_Number, Capacity, Monthly_Rent, Room_Type, Building_Id) VALUES
+(1, 101, 2, 2500, 'Double', 1),
+(2, 102, 1, 3500, 'Single', 1),
+(3, 103, 3, 1800, 'Triple', 1),
+(4, 104, 2, 2500, 'Double', 2),
+(5, 105, 1, 3500, 'Single', 2),
+(6, 106, 3, 1800, 'Triple', 2),
+(7, 107, 2, 2600, 'Double', 3),
+(8, 108, 1, 3600, 'Single', 3),
+(9, 109, 2, 2400, 'Double', 4),
+(10,110, 3, 1700, 'Triple', 5);
+SET IDENTITY_INSERT dbo.Rooms OFF;
+GO
+
+SET IDENTITY_INSERT dbo.Student ON;
+INSERT dbo.Student (Student_Id, First_Name, Last_Name, Email, Phone, Date_of_Birth, Enrollment_Date) VALUES
+(1,  N'Ahmed',   N'Hassan',  'ahmed.hassan@uni.edu',    '01012345678', '2005-03-12', '2024-09-15'),
+(2,  N'Mohamed', N'Ali',     'mohamed.ali@uni.edu',     '01123456789', '2004-07-25', '2023-09-17'),
+(3,  N'Omar',    N'Khaled',  'omar.khaled@uni.edu',     '01234567890', '2005-11-03', '2024-09-15'),
+(4,  N'Mariam',  N'Mahmoud', 'mariam.mahmoud@uni.edu',  '01509876543', '2006-01-19', '2025-09-14'),
+(5,  N'Mostafa', N'Ibrahim', 'mostafa.ibrahim@uni.edu', '01098765432', '2004-05-30', '2023-09-17'),
+(6,  N'Mahmoud', N'Saeed',   'mahmoud.saeed@uni.edu',   '01187654321', '2005-09-08', '2024-09-15'),
+(7,  N'Salma',   N'Adel',    'salma.adel@uni.edu',      '01276543210', '2006-04-14', '2025-09-14'),
+(8,  N'Hossam',  N'Nabil',   'hossam.nabil@uni.edu',    '01055512345', '2005-12-22', '2024-09-15'),
+(9,  N'Nour',    N'Samir',   'nour.samir@uni.edu',      '01166677788', '2006-06-02', '2025-09-14'),
+(10, N'Ziad',    N'Mostafa', 'ziad.mostafa@uni.edu',    '01299900011', '2004-10-17', '2023-09-17');
+SET IDENTITY_INSERT dbo.Student OFF;
+GO
+
+SET IDENTITY_INSERT dbo.Staff ON;
+INSERT dbo.Staff (Staff_Id, First_Name, Last_Name, Role, Phone) VALUES
+(1, N'Hatem',   N'Salah',       'Dormitory Manager',       '01001112223'),
+(2, N'Mona',    N'Fawzy',       'Receptionist',            '01102223334'),
+(3, N'Samir',   N'Abdelrahman', 'Security Guard',          '01203334445'),
+(4, N'Fatma',   N'Zaki',        'Housekeeping Supervisor', '01504445556'),
+(5, N'Ibrahim', N'Shaker',      'Maintenance Technician',  '01005556667'),
+(6, N'Heba',    N'Mansour',     'Accountant',              '01106667778');
+SET IDENTITY_INSERT dbo.Staff OFF;
+GO
+
+SET IDENTITY_INSERT dbo.Room_Assignments ON;
+INSERT dbo.Room_Assignments (Assignment_Id, Start_Date, End_Date, Status, Student_Id, Room_Id) VALUES
+(1,  '2025-09-20', '2026-06-30', 'Completed', 1, 3),
+(2,  '2025-09-20', '2026-06-30', 'Completed', 2, 5),
+(3,  '2025-09-20', '2026-06-30', 'Completed', 4, 8),
+(4,  '2026-09-20', '2026-09-25', 'Cancelled', 9, 6),
+(5,  '2026-09-20', '2027-06-30', 'Active',    1, 1),
+(6,  '2026-09-20', '2027-06-30', 'Active',    3, 1),
+(7,  '2026-09-20', '2027-06-30', 'Active',    2, 2),
+(8,  '2026-09-20', '2027-06-30', 'Active',    5, 4),
+(9,  '2026-09-20', '2027-06-30', 'Active',    6, 4),
+(10, '2026-09-20', '2027-06-30', 'Active',    8, 5),
+(11, '2026-09-20', '2027-06-30', 'Active',   10, 3),
+(12, '2026-09-20', '2027-06-30', 'Active',    4, 7),
+(13, '2026-09-20', '2027-06-30', 'Active',    7, 7),
+(14, '2026-09-26', '2027-06-30', 'Active',    9, 9);
+SET IDENTITY_INSERT dbo.Room_Assignments OFF;
+GO
+
+SET IDENTITY_INSERT dbo.Payments ON;
+INSERT dbo.Payments (Payment_Id, Amount, Payment_Date, Payment_Month, Status, Student_Id, Assignment_Id) VALUES
+(1,  2500, '2026-09-22', '2026-09-01', 'Paid',    1,  5),
+(2,  2500, '2026-09-23', '2026-09-01', 'Paid',    3,  6),
+(3,  3500, '2026-09-21', '2026-09-01', 'Paid',    2,  7),
+(4,  2500, '2026-09-25', '2026-09-01', 'Paid',    5,  8),
+(5,  2500, '2026-09-28', '2026-09-01', 'Paid',    6,  9),
+(6,  3500, '2026-09-24', '2026-09-01', 'Paid',    8,  10),
+(7,  1800, '2026-09-22', '2026-09-01', 'Paid',    10, 11),
+(8,  2600, '2026-09-27', '2026-09-01', 'Paid',    4,  12),
+(9,  2600, '2026-09-27', '2026-09-01', 'Paid',    7,  13),
+(10, 2400, '2026-09-30', '2026-09-01', 'Paid',    9,  14),
+(11, 2500, '2026-10-03', '2026-10-01', 'Paid',    1,  5),
+(12, 3500, '2026-10-02', '2026-10-01', 'Paid',    2,  7),
+(13, 2500, '2026-10-04', '2026-10-01', 'Paid',    5,  8),
+(14, 2500, '2026-10-05', '2026-10-01', 'Overdue', 6,  9),
+(15, 3500, '2026-10-20', '2026-10-01', 'Pending', 8,  10),
+(16, 1800, '2026-10-06', '2026-10-01', 'Paid',    10, 11),
+(17, 1800, '2026-05-02', '2026-05-01', 'Paid',    1,  1),
+(18, 3500, '2026-05-03', '2026-05-01', 'Paid',    2,  2);
+SET IDENTITY_INSERT dbo.Payments OFF;
+GO
+
+SET IDENTITY_INSERT dbo.Maintenance_Requests ON;
+INSERT dbo.Maintenance_Requests (Request_Id, Description, Request_Date, Status, Student_Id, Room_Id, Staff_Id) VALUES
+(1,  'Air conditioner is not cooling',     '2026-09-28', 'Completed',   1,  1, 5),
+(2,  'Leaking tap in the bathroom',        '2026-10-01', 'Completed',   2,  2, 5),
+(3,  'Broken window latch',                '2026-10-05', 'In Progress', 5,  4, 5),
+(4,  'Light bulb needs replacement',       '2026-10-07', 'Completed',   3,  1, 5),
+(5,  'Room needs deep cleaning',           '2026-10-09', 'Completed',   8,  5, 4),
+(6,  'Door lock is jammed',                '2026-10-12', 'In Progress', 4,  7, 5),
+(7,  'Wi-Fi is not working in the room',   '2026-10-14', 'Pending',     10, 3, 5),
+(8,  'Water heater is not working',        '2026-10-16', 'Pending',     6,  4, 5),
+(9,  'Lost room key, needs a replacement', '2026-10-17', 'Pending',     9,  9, 3),
+(10, 'Broken wardrobe door',               '2026-10-18', 'Pending',     7,  7, 5);
+SET IDENTITY_INSERT dbo.Maintenance_Requests OFF;
+GO
+
+SELECT name, physical_name, type_desc,
+       size * 8 / 1024 AS Size_MB,
+       CASE max_size WHEN -1 THEN 'UNLIMITED' ELSE CAST(max_size * 8 / 1024 AS VARCHAR(20)) + ' MB' END AS Max_Size,
+       CASE is_percent_growth WHEN 1 THEN CAST(growth AS VARCHAR(10)) + ' %'
+            ELSE CAST(growth * 8 / 1024 AS VARCHAR(10)) + ' MB' END AS Growth
+FROM sys.database_files;
+
+SELECT OBJECT_NAME(parent_object_id) AS TableName, name AS ConstraintName, type_desc
+FROM sys.objects
+WHERE type IN ('PK','F','UQ','C','D')
+ORDER BY TableName, type_desc;
+GO
